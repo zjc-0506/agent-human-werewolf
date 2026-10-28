@@ -1,0 +1,1119 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>提示词实验室 · 纯文本对局可快照</title>
+<link rel="icon" href="data:," />
+<style>
+  :root{
+    --bg:#12141a; --panel:#1a1d26; --panel2:#20242f; --line:#2c3140;
+    --fg:#dfe3ec; --dim:#8b93a7; --accent:#5b8def; --ok:#4ec9a0; --warn:#e3b341; --bad:#f2777a;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.6 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--fg)}
+  header{display:flex;align-items:center;gap:10px;padding:9px 16px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}
+  header h1{font-size:15px;margin:0;font-weight:600}
+  header .hint{font-size:12px;color:var(--dim)}
+  .top-actions{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+  button{background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:5px 11px;cursor:pointer;font-size:12.5px}
+  button:hover{border-color:var(--accent)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.go{background:var(--ok);border-color:var(--ok);color:#0b2019;font-weight:600}
+  main{display:grid;grid-template-columns:340px 300px 1fr;gap:10px;padding:10px;height:calc(100vh - 50px)}
+  .col{background:var(--panel);border:1px solid var(--line);border-radius:8px;display:flex;flex-direction:column;overflow:hidden}
+  .col h2{margin:0;padding:8px 12px;font-size:12.5px;font-weight:600;color:var(--dim);border-bottom:1px solid var(--line);background:var(--panel2)}
+  .body{padding:10px;overflow:auto;flex:1}
+  .sub{font-size:12px;color:var(--dim);margin:12px 0 5px;border-top:1px dashed var(--line);padding-top:9px}
+  label{display:block;font-size:11.5px;color:var(--dim);margin:6px 0 3px}
+  textarea,input,select{width:100%;background:#0f1218;color:var(--fg);border:1px solid var(--line);border-radius:5px;padding:5px 8px;font:12.5px/1.6 "Cascadia Mono",Consolas,"Microsoft YaHei",monospace}
+  textarea{resize:vertical}
+  .row{display:flex;gap:6px;align-items:center}
+  .row>*{flex:1}
+  .tag{display:inline-block;font-size:11px;padding:1px 6px;border-radius:9px;background:#2b3244;color:var(--dim);margin-left:4px}
+  .list-item{padding:6px 9px;border:1px solid var(--line);border-radius:6px;margin-bottom:5px;cursor:pointer;background:var(--panel2)}
+  .list-item.active{border-color:var(--accent);background:#1d2740}
+  .list-item .nm{font-size:12.5px}
+  .list-item .meta{font-size:11px;color:var(--dim)}
+  .badge{font-size:11px;padding:1px 6px;border-radius:9px}
+  .b-ok{background:#14432f;color:var(--ok)} .b-warn{background:#463612;color:var(--warn)} .b-bad{background:#4a1f21;color:var(--bad)}
+  #out{white-space:pre-wrap;background:#0f1218;border:1px solid var(--line);border-radius:6px;padding:8px;font:12.5px/1.7 "Cascadia Mono",Consolas,monospace;min-height:110px;max-height:30vh;overflow:auto}
+  /* 对局直播（群聊式） */
+  #chatBox{background:#0f1218;border:1px solid var(--line);border-radius:6px;padding:8px;
+           height:52vh;overflow:auto;display:flex;flex-direction:column;gap:6px}
+  .chat-sys{align-self:center;max-width:94%;font-size:11.5px;color:var(--dim);text-align:center;line-height:1.5}
+  .chat-msg{align-self:flex-start;max-width:90%;background:#1b2334;border:1px solid var(--line);
+            border-radius:10px 10px 10px 3px;padding:5px 9px;font-size:12.5px;line-height:1.6}
+  .chat-msg.chat-pick{cursor:pointer}
+  .chat-msg.chat-pick:hover{border-color:var(--accent);background:#20304e}
+  .chat-msg .who{font-size:10.5px;color:#7fa5ff;display:block;margin-bottom:1px}
+  .chat-day{align-self:center;font-size:10.5px;color:#5b6472;border:1px dashed var(--line);
+            border-radius:9px;padding:0 10px;line-height:1.7}
+  #chatBox.empty::after{content:'（还没有直播数据：连上对局服务，开一局就会在这里滚动）';
+                        font-size:11.5px;color:var(--dim);align-self:center}
+  /* 对照席位（ref）在列表里的分隔样式 */
+  .agentRefNote{margin:16px 0 6px;padding:5px 8px;font-size:11px;line-height:1.6;
+                color:#9a937f;border:1px dashed var(--line);border-radius:6px;background:#141820}
+  .list-item.ref{border-style:dashed;opacity:.92}
+  .who-role{display:inline-block;margin-left:4px;padding:0 5px;border-radius:6px;font-size:10px;line-height:1.5}
+  .who-role.wolf{background:#5b1d1d;color:#ff9b9b}
+  .who-role.god{background:#1d3a5b;color:#9bc8ff}
+  .chat-god{align-self:center;max-width:96%;font-size:11.5px;line-height:1.7;color:#b9a44c;
+            border:1px dashed #6b5d2e;border-radius:8px;padding:4px 10px;background:#171512;text-align:left}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th,td{border-bottom:1px solid var(--line);padding:4px 6px;text-align:left;vertical-align:top}
+  th{color:var(--dim);font-weight:500}
+  .flexline{display:flex;gap:8px;align-items:center;margin:6px 0;flex-wrap:wrap}
+  .grow{flex:1}
+  .muted{color:var(--dim);font-size:11.5px}
+  .pill{border:1px solid var(--line);border-radius:20px;padding:2px 9px;font-size:11.5px;cursor:pointer;display:inline-block}
+  .pill.on{background:var(--accent);border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<header>
+  <h1>提示词实验室 <span class="tag">纯文本对局 · 可快照 · 每 AI 独立模型/密钥</span></h1>
+  <span class="hint">数据只存本机 localStorage；密钥不上传任何第三方</span>
+  <div class="top-actions">
+    <button title="把当前全部快照、提示词块、席位配置、日志打包成一个 JSON 文件，交给后端同学对接线上" onclick="exportAll()">导出全部</button>
+    <button title="导入之前导出的 JSON，恢复全部快照与提示词配置" onclick="document.getElementById('imp').click()">导入</button>
+    <input id="imp" type="file" accept=".json" hidden onchange="importAll(this)">
+    <button title="把每次试跑的记录（原始输出/是否兜底/耗时）导出为 JSONL，用于批量回归与归因分析" onclick="exportLog()">导出决策日志</button>
+    <button title="把本机实验室恢复为初始状态（内置示例快照、默认提示词块、空席位配置、空日志），你自己改的内容会丢失，不可恢复" onclick="wipe()">重置为默认</button>
+  </div>
+</header>
+
+<main>
+  <!-- 最左：对局直播 + 运行（2026-10-26 三列重构：原第③列并入这里） -->
+  <section class="col">
+    <h2>⓪ 对局直播 · 运行</h2>
+    <div class="body">
+      <div class="flexline" id="chatHead"><span class="muted" id="chatInfo">未连接</span></div>
+      <div class="flexline">
+        <label style="margin:0" title="旁观的人类是上帝视角：AI 不知道的（身份、狼刀、女巫药、守卫挡刀、验人结果）这里全部可见。关掉则只看公开信息">
+          <input type="checkbox" id="godOn" checked style="width:auto;vertical-align:middle" onchange="chatTick(true)"> 👁 上帝视角（身份 + 每晚动作，融入直播流）
+        </label>
+        <button id="btnExitImport" title="导入的对局日志占住了直播间；点这里回到在线直播" onclick="exitImport()" hidden>回在线直播</button>
+      </div>
+      <div id="chatBox" class="empty"></div>
+      <div class="flexline">
+        <button title="暂停推进：对局停在下一步之前，此时可以改提示词" onclick="engPause(true)">⏸ 暂停</button>
+        <button title="取消暂停，对局继续自动推进" onclick="engPause(false)">▶ 继续</button>
+        <button title="暂停状态下再往前走一步，走完自动停住。勾选下方「用实验室提示词」时，这一步的第一个模型调用会用第②列块+选中步局面组装的 prompt" onclick="stepLab();chatSnapSoon()">⏭ 单步</button>
+        <button title="刷新直播" onclick="chatTick(true)">⟳</button>
+      </div>
+      <div class="flexline">
+        <select id="chatSnapSel" class="grow" title="局面快照：每一步开始前的完整引擎状态。选中即把该步局面填入第①列（作为试跑的局面来源）" onchange="chatSnapPick()">
+          <option value="">— 回退到哪一步之前（=选定局面）—</option>
+        </select>
+        <button title="把整局退回所选快照：引擎状态、播报、游标全部回退，过期预跑决策作废，然后自动暂停 —— 改完提示词从那里重跑（重跑整步，规则等价但模型输出会有差异）" onclick="chatRewind()">⏪ 回退</button>
+      </div>
+      <div class="flexline">
+        <label style="margin:0" title="勾选后，⏭ 单步的下一步模型调用改用第②列块+选中步局面组装的 prompt（一次性，用完即弃）。注意：调用仍走服务端配置的 key——第①列席位的 key 只用于本地试跑对比">
+          <input type="checkbox" id="ovr" style="width:auto;vertical-align:middle"> 单步用实验室提示词
+        </label>
+      </div>
+      <div class="muted" style="font-size:11px">回退是<b>真回退</b>（对局结束后依然可用：把 winner 一起退回去就能接着跑）。重跑的是整步。</div>
+
+      <div class="sub">选中步详情（点上面的气泡或选回退步后自动更新）</div>
+      <div id="stepDetail" class="muted">在直播里点一条 AI 发言，或在上面的下拉里选一步。</div>
+
+      <div class="flexline">
+        <button class="go" title="用第①列席位 × 第②列块 × 选中步局面，本地组装并调用模型（不进对局）" onclick="runOnce(false)">▶ 试跑这一步</button>
+        <button title="不是两个席位同台进对局 —— 是用两个席位各自独立调用同一个 prompt（同一局面），并排对比两个模型的回答，用于选模型/调提示词。对局里 AI 的配置走「⤴ 应用到对局」" onclick="runOnce(true)">⇄ 双席位对比</button>
+        <span id="status" class="muted">尚未运行</span>
+      </div>
+      <div class="flexline">
+        <span class="muted">对比席位：</span>
+        <select id="cmpAgent" class="grow" title="双席位对比时使用的另一个席位"></select>
+      </div>
+      <div class="sub">模型原始输出（试跑结果 / 选中步当时的一字不改输出）</div>
+      <div id="out"></div>
+      <div class="sub">解析与归因</div>
+      <div id="parse"></div>
+
+      <div class="sub">决策日志（本地试跑自动累加）</div>
+      <div id="logWrap" style="max-height:16vh;overflow:auto"></div>
+
+      <div class="sub">连接 · 开局 · 席位接管</div>
+      <div class="flexline">
+        <input id="engine" class="grow" placeholder="对局服务地址（留空=同源）" onchange="setEngine(this.value)">
+        <button title="刷新连接状态" onclick="engStatus()">连接</button>
+      </div>
+      <div class="flexline">
+        <label style="margin:0">AI 数 <input type="number" id="newAiN" value="6" min="4" max="9"
+          style="width:50px"></label>
+        <button title="直接在这里开一局全 AI 局（不跳 /play）：AI 的模型与 key 用第①列席位（若已点「⤴ 应用到对局」），否则用服务端默认配置" onclick="startGameHere()">▶ 开一局</button>
+        <span class="muted" id="startInfo"></span>
+      </div>
+      <div class="flexline">
+        <button title="把第①列的 AI 席位（baseUrl/model/key/温度）推给对局服务：下一局开局的 AI 全部按这套配置装配（第 1 个 AI 用席位A，依序循环），key 也走第①列" onclick="pushAgents()">⤴ 把第①列席位应用到对局</button>
+        <span class="muted" id="agentsApplied"></span>
+      </div>
+      <div class="flexline">
+        <button title="导入 /play 封面导出的对局文件（.json，含时间线+上帝视角+步骤）或旧的模型调用日志（.jsonl）：导入后在直播间完整重放" onclick="document.getElementById('impLog').click()">⤓ 导入对局文件</button>
+        <input id="impLog" type="file" accept=".json,.jsonl,.txt" hidden onchange="importLog(this)">
+        <span class="muted" style="font-size:11px">多人类多 AI 的局导出后也能完整重放（真人发言与播报都在时间线里）</span>
+      </div>
+      <div class="flexline">
+        <label style="margin:0"><input type="checkbox" id="autopoll" onchange="togglePoll()" style="width:auto;vertical-align:middle"> 状态轮询（每 3 秒）</label>
+        <span class="muted" id="engInfo">未连接</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 中左：AI 席位（试跑用） -->
+  <section class="col">
+    <h2>① AI 席位（试跑用）</h2>
+    <div class="body">
+      <div class="muted" style="font-size:11px">局面来自列0选中的步（点气泡或选回退步自动填入）；这些席位只用于<b>本地试跑对比</b> —— 对局里的 AI 用的是服务端配置的模型与 key（在 /admin 配置台改）。</div>
+
+      <div class="sub">AI 席位 · 各自独立配置（进对局）</div>
+      <div id="agentList"></div>
+      <div class="flexline">
+        <button title="新增一个 AI 席位，可配不同的接口地址、模型名与密钥" onclick="newAgent()">+ 新增席位</button>
+        <button title="删除当前选中的席位" onclick="delAgent()">删除</button>
+      </div>
+
+      <!-- 对照席位独立区块（2026-10-26 用户定）：只试跑，不进对局 -->
+      <div class="sub" style="margin-top:18px">对照席位（只试跑对比 · 不进对局）</div>
+      <div class="muted" style="font-size:11px">下方席位<b>永远不会被装配进对局</b> —— 它只在「试跑这一步 / 双席位对比」时对同一个局面各调一次模型，用来对比不同模型/参数的表现。</div>
+      <div id="refAgentList" style="margin-top:6px"></div>
+
+      <div class="sub">编辑当前席位</div>
+      <div id="agentEdit"></div>
+
+      <div class="sub">代理（解决浏览器跨域）</div>
+      <label>本地代理地址（留空=直连，可能被 CORS 拦）</label>
+      <input id="proxy" placeholder="http://127.0.0.1:8788/v1" onchange="save()">
+      <div class="muted">直连报 CORS 时，运行同目录 <code>promptlab_proxy.py</code>，再填上面这个地址。</div>
+    </div>
+  </section>
+
+  <!-- 中 -->
+  <section class="col">
+    <h2>② 线上提示词契约（与主产品同一份；改完下一次模型调用即生效）</h2>
+    <div class="body">
+      <div class="flexline">
+        <button title="从对局服务 /api/admin/prompts 拉取全部可改的提示词条目（按分组展示）" onclick="liveLoad()">载入线上契约</button>
+        <button title="把改动过的条目保存回对局服务（只提交你改过的项）；保存后下一次模型调用就用新文本（包括进行中的局）——想只影响新局，请在没有对局进行时保存" onclick="liveSave()">保存到线上</button>
+        <span class="muted" id="liveInfo">未载入</span>
+      </div>
+      <div id="liveBlocks" class="muted">载入后这里按分组列出全部可改条目；只读守卫项也会列出来（不可改）。对局服务地址留空 = 直连当前同源。</div>
+
+      <div class="sub">离线沙盒（下面这些块与线上契约<b>不同源</b>，只用于快速试验；要改线上请用上面那组按钮）</div>
+      <div class="sub">槽位 —— 结构与线上一致，<b>文本已清空</b>，由提示词负责人填写</div>
+      <div class="row">
+        <div><label>{seat} 座位</label><input id="sl_seat" oninput="save()"></div>
+        <div><label>{role_label} 角色名</label><input id="sl_role_label" oninput="save()"></div>
+      </div>
+      <div class="row">
+        <div><label>{personality} 人格</label><input id="sl_personality" oninput="save()"></div>
+        <div><label>{stake} 档位</label><input id="sl_stake" oninput="save()"></div>
+      </div>
+      <label>{experiences} 跨局经验回灌</label><textarea id="sl_experiences" rows="2" oninput="save()"></textarea>
+      <label>{anti_injection} 防注入（结构必留，勿删）</label><textarea id="sl_anti_injection" rows="2" oninput="save()"></textarea>
+      <label>{anti_bomb} 防逻辑炸弹（结构必留，勿删）</label><textarea id="sl_anti_bomb" rows="2" oninput="save()"></textarea>
+
+      <div class="sub">提示词块 —— 勾选即生效，一项一块便于 A/B</div>
+      <div id="blockList"></div>
+
+      <div class="sub">组装模板（{{...}} 为占位符）</div>
+      <label>system 模板</label><textarea id="tmplSystem" rows="6" oninput="save()"></textarea>
+      <label>user 模板</label><textarea id="tmplUser" rows="10" oninput="save()"></textarea>
+
+      <div class="sub">预设片段（参考用，建议改写后再用）</div>
+      <div class="flexline">
+        <select id="presetTarget" class="grow" title="选择要插入的目标块"></select>
+        <select id="presetPick" class="grow" title="选择参考片段">
+          <option value="">— 选一个参考片段 —</option>
+          <option value="rules">规则要点（精简版）</option>
+          <option value="hardInfo">硬信息优先于性格</option>
+          <option value="nofab">绝对不能编造</option>
+          <option value="style">说话方式</option>
+          <option value="timeline">时间线：上面没提就是没发生</option>
+          <option value="claim">跳身份规则</option>
+          <option value="wolf">狼队共同原则</option>
+          <option value="angle">本轮切入角度</option>
+          <option value="output">结构化输出（决策类）</option>
+        </select>
+      </div>
+      <div class="flexline">
+        <button title="把选中的参考片段插入目标块，并自动启用该块" onclick="applyPreset()">插入到目标块</button>
+        <button title="把所有块恢复为方案里预填的默认文本" onclick="resetBlocks()">恢复默认块文本</button>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+/* ================= 默认块文本（方案预填，可改） ================= */
+const BLOCK_DEFS=[
+  {id:'rules',      name:'规则要点',       on:true},
+  {id:'identity',   name:'身份块',         on:true},
+  {id:'hardInfo',   name:'硬信息优先',     on:true},
+  {id:'style',      name:'说话方式',       on:true},
+  {id:'timeline',   name:'时间线防捏造',   on:true},
+  {id:'claim',      name:'跳身份规则',     on:false},
+  {id:'wolf',       name:'狼队战术',       on:false},
+  {id:'angle',      name:'本轮切入角度',   on:false},
+  {id:'antiRepeat', name:'反重复',         on:true},
+  {id:'task',       name:'本次任务指令',   on:true},
+  {id:'output',     name:'输出格式',       on:true},
+];
+const DEFAULT_BLOCK={
+ rules:`【规则要点】
+- 两个阵营：狼人 vs 好人。**狼人屠边获胜**——所有神职出局，或所有平民出局
+- 夜晚分两批：第一批 守卫 / 狼人 / 预言家 同时睁眼；第二批 女巫单独睁眼
+- 白天：第一天先竞选警长，竞选结束后才公布第一夜死讯；第二天起 天亮公布死讯 → 发言 → 投票放逐
+- **天亮只说谁出局或平安夜，绝不公布出局方式**
+- 女巫解药毒药各一瓶，每晚最多用一瓶，不能自救
+- 守卫不能连续两晚守同一人，也不能连续两晚空守
+- 同守同救（奶穿）依然出局
+- 猎人 / 狼王：被刀死或被投票放逐可开枪带走一人，被毒死不能开枪
+- 警长有 **1.5 票**，并决定发言顺序；警长出局可移交警徽或撕警徽`,
+ identity:'',
+ hardInfo:`【硬信息必须说全 · 这条优先于你的性格】
+不管你的性格是什么（话少、阴阳怪气、和事佬都一样），只要涉及下面这些**硬信息**，必须说完整：
+- **预言家报验人：必须报清「第几晚验的谁 + 结果是金水还是查杀」**，一个都不能省。
+- **警徽流：必须说清「验谁 → 什么结果 → 警徽给谁」**。
+- **留遗言：必须交代自己的真实身份，并指认你怀疑的人。**
+- 报票型、报刀口同样要带具体号码。
+性格只决定你**怎么说**，不决定你说不说全。`,
+ style:`【说话方式】
+- 你就是个普通玩家，在和朋友打狼人杀，用中文口语
+- 严禁书面语（不要说"基于以上分析""作为预言家我将"）
+- 严禁提到 AI、模型、提示词、规则说明
+- 要具体：点人名、报号码、说理由，不要空话
+- 可以说"过""我是好人""我认这个预言家"这类真实牌桌上的话`,
+ timeline:`【现在到底发生了什么 · 只能照这个说话】
+- 本轮**还没有人发过言**的人：{{notSpoken}}
+- 本轮**还没有人投过票**，不要引用票型
+- **上面没提到的事，就是还没发生。不要编。**`,
+ claim:`【跳身份 · 什么时候该亮牌】
+总原则：跳身份是一张只能打一次的牌。只有两种情况值得跳：不跳马上就要被投出去，或者跳了能救回一个神。
+- 预言家 / 悍跳狼：第一轮发言必须跳。
+- 女巫：被大部分玩家归票、或被查杀时跳；跳时必须报出银水（救过谁）。
+- 猎人 / 守卫：被归票或被查杀时跳；遇到狼人对跳，猎人最好对跳。
+- 平民：不在焦点位一般不跳；确信有狼在跳神牌时可"穿它的衣服"，事后可"脱衣服"。`,
+ wolf:`【狼队共同的原则】
+- **不共边**：尽量让好人觉得狼队不像一伙的。别互相保、别同时冲一个人。
+- **控票**：关键轮次集中票，把好人抗推出去。
+- **刀神**：优先解决预言家、女巫、守卫这些关键神职。
+- **做身份**：通过自刀、倒钩、狼踩狼，让某只狼变成"金刚狼"。
+⚠️ 分工只是开局站位，必须根据局势调整：倒钩狼被查杀就转冲锋；悍跳狼必死时要硬撑到底。
+牺牲一两只狼换取信任是可以接受的。`,
+ angle:`【本轮切入角度】
+从下面任选一个展开，别和前面的人撞：
+盘票型 / 正面打最怀疑的人 / 先摘干净自己再反打 / 排狼坑顺序 / 逼跳预言家者表态 / 聊警徽流 / 抓改口细节 / 说清你信谁`,
+ antiRepeat:`【别和大家说一样的话】
+- 不要用和前面的人相同的开场白、句式和结论顺序
+- 别人已经说过的观点，不要再复述一遍
+- 更不要"我同意前面某人的看法"然后什么都没加`,
+ task:'',
+ output:''
+};
+const PRESETS=Object.assign({}, DEFAULT_BLOCK, {
+ nofab:`【绝对不能编造】
+你说的每一条信息，都要能在上面那些清单里找到出处。
+- 不要评价**还没发过言**的人，更不要替他们编内容或者站边
+- 不要引用**还没发生**的事
+- 不确定的事就说"我不知道""我没注意"，**不要猜着当成事实说出来**`,
+ output:`**只输出 JSON，不要写理由、不要任何解释文字**：
+{"target": 号码}   // 不选就写 null`
+});
+
+const DEFAULT_SYS=`你是 {{seat}} 号玩家，正在参加一局中文狼人杀，请完全代入你的身份。
+{{anti_injection}}
+{{anti_bomb}}`;
+const DEFAULT_USER=`{{rules}}
+{{identity}}
+{{hardInfo}}
+{{style}}
+{{claim}}
+{{wolf}}
+【场上情况】
+{{public}}
+{{timeline}}
+{{angle}}
+{{antiRepeat}}
+【现在轮到你】
+{{task}}
+{{output}}`;
+
+
+/* ================= 状态 ================= */
+const KEY='promptlab.v2';
+function SAMPLE_AGENTS(){
+  return [
+    {label:'席位A · 主力', baseUrl:'https://api.deepseek.com/v1', model:'deepseek-flash', apiKey:'',
+     timeout:60, retries:3, thinking:'disabled', temperature:0.8},
+    /* 席位B：默认与主力同配置（对照用）。ref=true = 对照席位，只试跑、不进对局。
+       注：qwen-plus 是对话模型不是 ASR，但默认统一成主力配置，跨厂商时再手改。 */
+    {label:'对照席位B · 只试跑', ref:true, baseUrl:'https://api.deepseek.com/v1', model:'deepseek-flash', apiKey:'',
+     timeout:60, retries:3, thinking:'disabled', temperature:0.8}
+  ];
+}
+function blank(){
+  const blocks={}; BLOCK_DEFS.forEach(b=>blocks[b.id]={text:DEFAULT_BLOCK[b.id]||'',on:!!b.on});
+  return {
+    version:'lab-2.0', proxy:'', engine:'',
+    snapshots:[{name:'（对局列0选步后自动填入）',round:1,phase:'',taskKind:'text',camp:'',identity:'',public:'',hardFacts:'',votes:'',timeline:'',allowed:'',task:'',output:''}],
+    activeSnap:0,
+    agents:SAMPLE_AGENTS(), activeAgent:0,
+    blocks,
+    slots:{seat:'',role_label:'',personality:'',stake:'',experiences:'',anti_injection:'',anti_bomb:''},
+    tmpl:{system:DEFAULT_SYS,user:DEFAULT_USER},
+    game:null, gameIdx:-1,
+    log:[]
+  };
+}
+let S=load();
+function load(){ try{ const raw=localStorage.getItem(KEY); if(raw){ const o=JSON.parse(raw); if(o&&o.version){ // 2026-10-26 手写示例快照（S0~S6）退役：老数据裁成 1 个，局面一律从列0选步自动填入
+if(Array.isArray(o.snapshots)&&o.snapshots.length>1){ o.snapshots=[o.snapshots[0]]; } if(!Array.isArray(o.snapshots)||!o.snapshots.length){ o=blank(); } o.activeSnap=0;
+// 2026-10-26 一次性迁移：老数据里默认的席位B是 dashscope/qwen-plus ——
+// 与主力统一；label 含「对照」的席位打 ref 标记（只试跑、不进对局）并排到末尾
+if(Array.isArray(o.agents)&&o.agents.length>1&&o.agents[1]&&o.agents[1].model==='qwen-plus'){
+  const a0=o.agents[0]||{}; o.agents[1].baseUrl=a0.baseUrl||o.agents[1].baseUrl; o.agents[1].model=a0.model||o.agents[1].model;
+}
+if(Array.isArray(o.agents)){
+  o.agents.forEach(a=>{ if(a&&/对照/.test(a.label||'')) a.ref=true; });
+  o.agents.sort((x,y)=>(x.ref?1:0)-(y.ref?1:0));
+}
+return o; } } }catch(e){} return blank(); }
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
+
+/* ================= 渲染 ================= */
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function fp(k){ return k && k.length>10 ? k.slice(0,6)+'…'+k.slice(-4) : (k?'••••':''); }
+
+function render(){
+  /* 2026-10-26 手写快照 UI（S0~S6 列表 + 编辑表单）退役：局面一律从列0选步
+     自动填入 S.snapshots[0]（applyStepSnap）；快照仍存在 S 里供试跑/对比用。 */
+
+  renderAgentList();   /* 🔴 席位列表渲染收口到 renderAgentList（含对照席位独立区块）——
+                          之前这里还有一份内联渲染，导致 ref 过滤"看起来没生效" */
+  const opts=S.agents.map((a,i)=>`<option value="${i}">${esc(a.label)}</option>`).join('');
+  document.getElementById('cmpAgent').innerHTML=opts;
+  try{ document.getElementById('cmpAgent').value=Math.min(1,S.agents.length-1); }catch(e){}
+
+  const ag=S.agents[S.activeAgent]||{};
+  const ai=(k,ph)=>`<label>${({label:'名称',baseUrl:'接口地址 baseUrl',model:'模型名',apiKey:'该席位专属 API Key（只存本机）',timeout:'超时（秒）',retries:'重试次数',temperature:'temperature'})[k]}</label><input ${k==='apiKey'?'type="password"':''} value="${esc(ag[k]==null?'':ag[k])}" oninput="setAgent('${k}',this.value)" placeholder="${ph||''}">`;
+  document.getElementById('agentEdit').innerHTML=
+      ai('label') + ai('baseUrl') + ai('model') + ai('apiKey')
+    + '<div class="row"><div>'+ai('timeout','60')+'</div><div>'+ai('retries','3')+'</div></div>'
+    + '<div class="row"><div>'+ai('temperature','0.8')+'</div><div><label>对照席位（勾上 = 只试跑对比，<b>不进对局</b>）</label>'
+    + '<select onchange="setAgent(\'ref\',this.value===\'1\')"><option value="0" '+(!ag.ref?'selected':'')+'>否 · 参与对局</option><option value="1" '+(ag.ref?'selected':'')+'>是 · 只试跑</option></select></div></div>'
+    + '<div class="row"><div><label>模型自带思考</label><select onchange="setAgent(\'thinking\',this.value)">'
+    + ['disabled','enabled'].map(v=>`<option value="${v}" ${ag.thinking===v?'selected':''}>${v==='disabled'?'关闭（推荐）':'开启'}</option>`).join('')
+    + '</select></div></div>';
+
+  document.getElementById('presetTarget').innerHTML=BLOCK_DEFS.map(b=>`<option value="${b.id}">${b.name}</option>`).join('');
+  document.getElementById('blockList').innerHTML=BLOCK_DEFS.map(b=>{
+    const v=S.blocks[b.id]||{text:'',on:false};
+    return `<div style="margin-bottom:8px">
+      <div class="flexline">
+        <span class="pill ${v.on?'on':''}" onclick="toggleBlock('${b.id}')">${v.on?'已启用':'未启用'} · ${b.name}</span>
+        <button title="把当前快照的对应字段填进这一块" onclick="fillFromSnap('${b.id}')">填入快照字段</button>
+      </div>
+      <textarea rows="3" oninput="setBlock('${b.id}',this.value)" placeholder="（空）">${esc(v.text)}</textarea>
+    </div>`;
+  }).join('');
+
+  for(const k of Object.keys(S.slots)){ const el=document.getElementById('sl_'+k); if(el && document.activeElement!==el) el.value=S.slots[k]; }
+  const ts=document.getElementById('tmplSystem'); if(document.activeElement!==ts) ts.value=S.tmpl.system;
+  const tu=document.getElementById('tmplUser'); if(document.activeElement!==tu) tu.value=S.tmpl.user;
+  const px=document.getElementById('proxy'); if(document.activeElement!==px) px.value=S.proxy;
+  const eg=document.getElementById('engine'); if(eg && document.activeElement!==eg) eg.value=S.engine||'';
+
+  renderGame(); renderLog();
+}
+function pickSnap(i){ S.activeSnap=i; save(); render(); }
+function pickAgent(i){ S.activeAgent=i; save(); render(); }
+function setSnap(k,v){ S.snapshots[S.activeSnap][k]=v; save(); }
+function setEngine(v){ S.engine=v; save(); }
+function setAgent(k,v){
+  if(k==='timeout'||k==='retries'||k==='temperature'){ S.agents[S.activeAgent][k]=parseFloat(v)||0; }
+  else if(k==='ref'){ S.agents[S.activeAgent][k]=!!v; }
+  else { S.agents[S.activeAgent][k]=v; }
+  save(); renderAgentList();
+}
+function renderAgentList(){
+  const el=document.getElementById('agentList'); if(!el) return;
+  const item=(i)=>{
+    const a=S.agents[i];
+    return `<div class="list-item ${i===S.activeAgent?'active':''}" onclick="pickAgent(${i})">
+       <div class="nm">${esc(a.label)} <span class="meta">${esc(a.model||'未设模型')}</span></div>
+       <div class="meta">key ${a.apiKey?esc(fp(a.apiKey)):'<span class="badge b-warn">未填</span>'} · ${esc(a.baseUrl||'')}</div>
+     </div>`;
+  };
+  // 🔴 对照席位（ref）独立区块渲染（2026-10-26 用户定）：不再混在席位列表里
+  el.innerHTML=S.agents.map((a,i)=>({i,a})).filter(x=>!x.a.ref).map(x=>item(x.i)).join('');
+  const rel=document.getElementById('refAgentList');
+  if(rel){
+    const refs=S.agents.map((a,i)=>({i,a})).filter(x=>x.a.ref);
+    rel.innerHTML=refs.length
+      ? refs.map(x=>item(x.i)).join('')
+      : '<div class="muted" style="font-size:11px">（没有对照席位 —— 在编辑当前席位时把「对照席位」开关拨到「是」即可创建）</div>';
+  }
+  const opts=S.agents.map((a,i)=>`<option value="${i}">${esc(a.label)}${a.ref?'（只试跑）':''}</option>`).join('');
+  const cmp=document.getElementById('cmpAgent'); if(cmp){ const cur=cmp.value; cmp.innerHTML=opts; cmp.value=cur||String(S.agents.findIndex(a=>a.ref)>=0?S.agents.findIndex(a=>a.ref):Math.min(1,S.agents.length-1)); }
+}
+function setBlock(id,v){ S.blocks[id].text=v; save(); }
+function toggleBlock(id){ S.blocks[id].on=!S.blocks[id].on; save(); render(); }
+function newSnapshot(){ S.snapshots.push({name:'新快照'+(S.snapshots.length+1),round:1,phase:'DAY_SPEECH',taskKind:'text',camp:'',identity:'',public:'',hardFacts:'',votes:'',timeline:'',allowed:'',task:'',output:''}); S.activeSnap=S.snapshots.length-1; save(); render(); }
+function delSnapshot(){ if(S.snapshots.length<=1){ alert('至少保留一个快照'); return; } S.snapshots.splice(S.activeSnap,1); S.activeSnap=0; save(); render(); }
+function newAgent(){
+  /* 2026-10-26：新增席位默认回填主力席位A的全部信息（含 key），改个名就能用 */
+  const base=S.agents[0]||{};
+  S.agents.push({label:'席位'+(S.agents.length+1)+' · 同主力',baseUrl:base.baseUrl||'',model:base.model||'',
+    apiKey:base.apiKey||'',timeout:base.timeout||60,retries:base.retries||3,
+    thinking:base.thinking||'disabled',temperature:base.temperature!=null?base.temperature:0.8});
+  S.activeAgent=S.agents.length-1; save(); render(); }
+function delAgent(){ if(S.agents.length<=1){ alert('至少保留一个席位'); return; } S.agents.splice(S.activeAgent,1); S.activeAgent=0; save(); render(); }
+function hint(msg){ const st=document.getElementById('status'); if(st) st.innerHTML='<span class="muted">'+esc(msg)+'</span>'; }
+function fillFromSnap(id){ const sn=S.snapshots[S.activeSnap]||{}; const map={identity:'identity',timeline:'timeline',task:'task',output:'output'};
+  if(map[id]){ S.blocks[id].text=sn[map[id]]||''; S.blocks[id].on=true; save(); render(); hint('已把快照的「'+map[id]+'」字段填入该块'); }
+  else { hint('这一块没有对应的快照字段，请手填（规则/硬信息/风格/战术等由提示词负责人编写）'); } }
+function applyPreset(){ const t=document.getElementById('presetTarget').value, p=document.getElementById('presetPick').value;
+  if(!t){ hint('先选目标块'); return; } if(!p){ hint('先选一个参考片段'); return; }
+  S.blocks[t].text=PRESETS[p]||''; S.blocks[t].on=true; save(); render(); hint('已插入参考片段到「'+t+'」，建议改写后再用'); }
+function resetBlocks(){ if(!confirm('把所有提示词块恢复为方案预填的默认文本？')) return;
+  BLOCK_DEFS.forEach(b=>{ S.blocks[b.id]={text:DEFAULT_BLOCK[b.id]||'',on:!!b.on}; }); save(); render(); }
+
+/* ================= 对局时间轴 ================= */
+function importLog(inp){
+  const f=inp.files[0]; if(!f) return; const r=new FileReader();
+  r.onload=()=>{
+    const text=String(r.result);
+    // ① 新格式：/play 封面导出的 lab-export（时间线 + 上帝视角 + 步骤）→ 直播间完整重放
+    try{
+      const o=JSON.parse(text);
+      if(o&&o.kind==='lab-export'){ ingestExport(o, f.name); inp.value=''; return; }
+    }catch(e){}
+    // ② 旧格式：每行一个 JSON 的模型调用日志
+    const lines=text.split(/\r?\n/).filter(x=>x.trim());
+    const steps=[];
+    lines.forEach((ln,i)=>{ try{ steps.push(Object.assign({_i:i}, JSON.parse(ln))); }catch(e){} });
+    if(!steps.length){ alert('没解析出任何步骤，请确认是每行一个 JSON 的日志'); return; }
+    S.game={name:f.name, steps}; S.gameIdx=0; save(); render();
+    hint('已导入 '+steps.length+' 步（旧格式：只有模型调用，没有播报流）');
+  };
+  r.readAsText(f); inp.value='';
+}
+/* lab-export 完整重放（2026-10-26）：多人类多 AI 的局也能在直播间完整回看 ——
+   真人发言与主持人播报都在 timeline 里；夜晚动作与身份走上帝视角。 */
+function ingestExport(o, name){
+  _importMode=true;
+  const b=document.getElementById('btnExitImport'); if(b) b.hidden=false;
+  _godRoles=o.roles||null; _godNights=o.night_records||[];
+  const tl=o.timeline||[];
+  const box=document.getElementById('chatBox');
+  box.innerHTML=''; box.classList.remove('empty');
+  _godDayN=0; _godNightDone={};
+  let dayN=0; const done={};
+  tl.forEach(m=>{
+    if(m.t==='sys'){
+      const nm=String(m.s||'').match(/第\s*(\d+)\s*夜/);
+      if(nm) dayN=parseInt(nm[1],10);
+      else if(/天亮|昨夜.*出局|平安夜/.test(String(m.s||''))){
+        const n=(_godNights||[])[dayN-1];
+        if(n&&!done[n.round||dayN]){ done[n.round||dayN]=true;
+          box.insertAdjacentHTML('beforeend', nightBubbleText(n)); }
+      }
+    }
+    box.insertAdjacentHTML('beforeend', chatBubble(m));
+  });
+  _chatN=tl.length;
+  if(!tl.length) box.innerHTML='<div class="chat-sys">（这个导出文件里没有时间线）</div>';
+  const info=document.getElementById('chatInfo');
+  if(info) info.innerHTML='<span class="badge b-ok">导入重放</span> '+esc(name||'')
+    +' · '+tl.length+' 条 · '+(o.winner?('· '+(o.winner==='wolf'?'狼人胜':'好人胜')+' · '):'')
+    +(o.round?('第'+o.round+'天 '+esc(_phaseCn(o.phase||''))):'');
+  // 模型调用步骤照旧进第①列/试跑链路
+  const steps=(o.steps||[]).map((s,i)=>Object.assign({_i:i}, s));
+  if(steps.length){ S.game={name:name||'导入对局', steps}; S.gameIdx=0; save(); render(); }
+  chatSnap();
+  hint('导入完成：直播间完整重放（含真人发言与夜晚动作）；'+steps.length+' 步模型调用可点气泡查看。点「回在线直播」切回实时');
+}
+function renderGame(){
+  const gi=document.getElementById('gameInfo'), gl=document.getElementById('gameList');
+  if(!gi||!gl) return;   // 2026-10-26 时间轴 UI 并入列0（气泡即时间轴），这两个元素已不存在
+  if(!S.game||!S.game.steps){ gi.textContent='尚未导入对局日志'; gl.innerHTML=''; return; }
+  gi.textContent=`${esc(S.game.name)} · 共 ${S.game.steps.length} 步 · 当前第 ${S.gameIdx+1} 步`;
+  gl.innerHTML=S.game.steps.map((s,i)=>
+    `<div class="list-item ${i===S.gameIdx?'active':''}" onclick="pickStep(${i})">
+       <div class="nm">第${i+1}步 · ${esc(s.round||'?')}天 ${esc(s.phase||'')} · ${s.seat!=null&&s.seat!==''?(Number(s.seat)+1)+' 号':'?号'} ${esc(s.role||'')}</div>
+       <div class="meta">${s.fallback?'<span class="badge b-bad">当时兜底</span>':'<span class="badge b-ok">当时正常</span>'} ${esc(s.ms||'')}${s.ms?'ms':''} · ${esc((s.raw||'').slice(0,40))}</div>
+     </div>`).join('');
+}
+/* ---- 线上提示词契约：直连 /api/admin/prompts（同源） ---- */
+let _live=null;   // {items:{key:{value,note,kind}}, changed:Set}
+async function liveLoad(){
+  const b=engBase()||'';   // 留空 = 同源（/lab 就挂在对局服务上，直接相对路径）
+  let j;
+  try{ const r=await fetch(b+'/api/admin/prompts'); if(!r.ok) throw new Error('HTTP '+r.status); j=await r.json(); }
+  catch(e){ document.getElementById('liveInfo').innerHTML='<span class="badge b-bad">拉取失败</span> '+esc(e.message); return; }
+  _live={items:{}, changed:new Set(), readonly:j.readonly||[]};
+  (j.groups||[]).forEach(g=>(g.items||[]).forEach(it=>{ _live.items[it.key]={value:it.value==null?'':String(it.value),note:it.note||'',kind:it.kind||'static'}; }));
+  renderLive(); hint('已载入 '+Object.keys(_live.items).length+' 项（只读守卫 '+_live.readonly.length+' 项）');
+}
+function renderLive(){
+  const box=document.getElementById('liveBlocks'); if(!box||!_live) return;
+  const byGroup={};
+  Object.keys(_live.items).forEach(k=>{
+    const it=_live.items[k];
+    const g=(k.split('::')[0])||'其他';
+    (byGroup[g]=byGroup[g]||[]).push([k,it]);
+  });
+  const keys=Object.keys(_live.items);
+  // 分组信息在拉取时已带 group 名 —— 用 note 前缀不可靠，直接按组名重排：这里按 key 原序即可
+  let html='';
+  const dirty=k=>_live.changed.has(k)?' <span class="badge b-warn">已改</span>':'';
+  keys.forEach(k=>{
+    const it=_live.items[k];
+    html+='<div style="margin-bottom:8px"><div class="flexline"><b style="font-size:12px">'+esc(k)+'</b>'+dirty(k)
+      +'<span class="grow"></span><span class="muted" title="'+esc(it.note)+'">'+esc((it.note||'').slice(0,26))+'</span></div>'
+      +'<textarea rows="'+(it.value.length>400?6:3)+'" data-k="'+esc(k)+'" oninput="liveEdit(this)">'+esc(it.value)+'</textarea></div>';
+  });
+  if(_live.readonly.length){
+    html+='<div class="sub">只读守卫（故意不可改）</div>';
+    _live.readonly.forEach(r=>{ html+='<div class="muted" title="'+esc(r.why||'')+'">🔒 '+esc(r.name||'')+'</div>'; });
+  }
+  box.className=''; box.innerHTML=html;
+  document.getElementById('liveInfo').innerHTML='已载入 '+keys.length+' 项，改了 '+_live.changed.size+' 项';
+}
+function liveEdit(ta){ const k=ta.getAttribute('data-k'); if(!_live||!(k in _live.items)) return;
+  if(ta.value!==_live.items[k].value) _live.changed.add(k); else _live.changed.delete(k);
+  const badge=ta.previousElementSibling.querySelector('.badge'); if(badge) badge.remove();
+  if(_live.changed.has(k)){ const b=document.createElement('span'); b.className='badge b-warn'; b.textContent='已改'; ta.previousElementSibling.appendChild(b); }
+  document.getElementById('liveInfo').innerHTML='已载入，改了 '+_live.changed.size+' 项';
+}
+async function liveSave(){
+  if(!_live){ hint('先载入线上契约'); return; }
+  if(!_live.changed.size){ hint('没有改动要保存'); return; }
+  const b=engBase()||'';   // 同上：留空 = 同源
+  const prompts={}; _live.changed.forEach(k=>{ prompts[k]=_live.items[k].value; });
+  try{
+    const r=await fetch(b+'/api/admin/prompts',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({prompts})});
+    const j=await r.json();
+    if(!r.ok) throw new Error(j.error||('HTTP '+r.status));
+    _live.changed.forEach(k=>{ _live.items[k].value=_live.items[k].value; });
+    _live.changed.clear(); renderLive();
+    hint('已保存 '+((j.applied||[]).length)+' 项，下一次模型调用即生效（含进行中的局）');
+  }catch(e){ hint('保存失败：'+e.message); }
+}
+
+/* ---- 对局直播（群聊式）+ 真回退 ---- */
+let _chatN=0;                      // 已渲染的时间线条数（增量渲染游标）
+let _chatSnapped=false;            // 单步后等快照列表更新
+let _chatSnapAt=0;                 // 快照下拉上次刷新时刻（限频）
+let _godRoles=null;                // 上帝视角：seat(0基) → role value
+let _godNights=[];                 // 导入的逐夜记录（在线模式用 live 接口实时取）
+let _importMode=false;             // 导入对局日志占住直播间时，暂停在线轮询
+let _godDayN=0;                    // 上帝视角：渲染游标对应的"第几夜"
+let _godNightDone={};              // 已插入气泡的夜（防重）
+const PHASE_CN={night:'夜晚',dawn:'天亮',discuss:'白天发言',vote:'投票',exile:'结算',setup:'准备',ended:'结束'};
+function _phaseCn(p){ return PHASE_CN[p]||p||''; }
+const ROLE_CN={wolf:'狼人',seer:'预言家',witch:'女巫',guard:'守卫',hunter:'猎人',
+               villager:'平民',idiot:'白痴',werewolf:'狼人'};
+function roleBadge(seat){
+  const on=document.getElementById('godOn');
+  if(!on||!on.checked||!_godRoles) return '';
+  const r=_godRoles[String(seat)];
+  if(!r) return '';
+  const wolf=r==='wolf'||r==='werewolf';
+  return ' <span class="who-role '+(wolf?'wolf':'god')+'">'+esc(ROLE_CN[r]||r)+'</span>';
+}
+function chatBubble(m){
+  if(m.t==='say'){
+    return '<div class="chat-msg chat-pick" title="点击：在下方「模型原始输出」区查看这句发言背后的完整 prompt 与模型原始输出"'
+         + ' onclick="chatPick('+Number(m.seat)+','+(Number(m.ts)||0)+')">'
+         + '<span class="who">'+esc(String(m.seat!=null?(Number(m.seat)+1):'?'))+' 号'+roleBadge(m.seat)+'</span>'
+         + esc(m.s||'')+'</div>';
+  }
+  return '<div class="chat-sys">'+esc(m.s||'')+'</div>';
+}
+async function chatTick(force){
+  if(_importMode) return;           // 导入的对局占住直播间，别被在线数据冲掉
+  const b=engBase()||'';
+  let j=null;
+  try{ const r=await fetch(b+'/api/lab/live?limit=300'); if(r.ok) j=await r.json(); }catch(e){}
+  const info=document.getElementById('chatInfo'); if(!info) return;
+  if(!j||!j.found){
+    info.innerHTML='<span class="muted">未连接 —— 两条开局路：</span>'
+      +' <b>①配席位→点下方「⤴ 应用到对局」→ 开一局</b>（对局 AI 的模型与 key 全用第①列的）'
+      +'；或直接开一局后在这里围观/回退。也可以导入对局日志离线复盘。';
+    return;
+  }
+  info.innerHTML=(j.paused?'<span class="badge b-warn">已暂停</span>':'<span class="badge b-ok">推进中</span>')
+    + ' 第'+(j.round||'?')+'天 · '+esc(_phaseCn(j.phase))
+    + (j.winner?(' · <b>'+esc(j.winner==='wolf'?'狼人胜':'好人胜')+'</b>'):'')
+    + ' · 步 '+(j.steps||0)
+    + (_live&&_live.changed.size
+        ? ' <span class="badge b-warn" title="第②列有未保存的契约改动：保存后回退+单步，重跑就会用新提示词">契约改 '+_live.changed.size+' 项未保存</span>'
+        : '');
+  const tl=j.timeline||[];
+  const box=document.getElementById('chatBox');
+  if(j.god){ _godRoles=j.god.roles||null; _godNights=j.god.night_records||[]; }
+  if(tl.length<_chatN||force){ _chatN=0; _godDayN=0; _godNightDone={}; box.innerHTML=''; box.classList.remove('empty'); }
+  if(_chatN===0&&!tl.length){ return; }
+  // 🔴 2026-10-26 修：别把人拽回底部 —— 只有用户本来就贴在底部（距底 < 40px）
+  // 才自动跟随；他往上滑看历史时，新消息不顶走他（对局结束没新消息更不该动）。
+  const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+  // 增量渲染：只追加 _chatN 之后的新条目；上帝视角气泡按夜晚位置融入
+  // （"🌙 第N夜"总结插在"天亮"播报之前，时间顺序与真实对局一致）
+  for(let k=_chatN;k<tl.length;k++){
+    const m=tl[k];
+    if(m.t==='sys'&&godOn()){
+      const nm=String(m.s||'').match(/第\s*(\d+)\s*夜/);
+      if(nm) _godDayN=parseInt(nm[1],10);
+      else if(/天亮|昨夜.*出局|平安夜/.test(String(m.s||''))){
+        const n=_godNights[_godDayN-1];
+        if(n&&!_godNightDone[n.round||_godDayN]){
+          _godNightDone[n.round||_godDayN]=true;
+          box.insertAdjacentHTML('beforeend', nightBubbleText(n));
+        }
+      }
+    }
+    box.insertAdjacentHTML('beforeend', chatBubble(m));
+  }
+  _chatN=tl.length;
+  if(tl.length) box.classList.remove('empty');
+  // 进行中的夜：流末一条实时气泡（id 去重：每拍更新内容而非追加）；
+  // 对局结束（winner 已定）就不再显示 —— 没有哪个夜还在"进行中"。
+  const oldNow=document.getElementById('godNow'); if(oldNow) oldNow.remove();
+  if(j.phase==='night'&&!j.winner&&godOn()&&j.god){
+    const gn=godNowBubble(j.god.night_now, j.round);
+    if(gn) box.insertAdjacentHTML('beforeend', gn);
+  }
+  if(nearBottom) box.scrollTop=box.scrollHeight;
+  // 步数变了就顺手刷新回退下拉（限频 5 秒，别每拍都拉）
+  if(Date.now()-_chatSnapAt>5000){ _chatSnapAt=Date.now(); chatSnap(); chatSyncSteps(); }
+}
+
+/* 上帝视角（2026-10-26 二改，用户定）：不再单独成块 —— 夜晚动作明细以**气泡**
+   形式融入直播流，插在"天亮"播报之前（时间顺序与真实对局一致）；
+   进行中的夜以流末一条实时气泡呈现（对局结束即消失）。 */
+function godOn(){ const el=document.getElementById('godOn'); return !!(el&&el.checked); }
+function seatName(s){ return s==null||s===-1?'空刀':(Number(s)+1)+' 号'; }
+function nightBubbleText(n){
+  const parts=[];
+  parts.push('狼刀 → '+seatName(n.kill));
+  if(n.heal!=null&&n.heal!==-1) parts.push('女巫救 '+seatName(n.heal));
+  else parts.push('女巫没救');
+  if(n.poison!=null&&n.poison!==-1) parts.push('毒 '+seatName(n.poison));
+  if(n.guard!=null&&n.guard!==-1) parts.push('守卫守 '+seatName(n.guard));
+  if(n.investigate!=null&&n.investigate!==-1&&_godRoles){
+    const t=_godRoles[String(n.investigate)];
+    parts.push('预言家验 '+seatName(n.investigate)+'（'+((t==='wolf'||t==='werewolf')?'狼人':'好人')+'）');
+  }
+  if(n.pierced) parts.push('奶穿（同守同救仍死）');
+  let tail='倒牌';
+  if(n.peaceful) tail='平安夜';
+  else if(n.saved_by_heal) tail='解药救回';
+  else if(n.saved_by_guard) tail='守卫挡刀';
+  return '<div class="chat-god">🌙 第'+esc(n.round||'?')+'夜：'+esc(parts.join(' · '))+' ⇒ <b>'+esc(tail)+'</b></div>';
+}
+function godNowBubble(now, round){
+  const pts=(now&&now.wolf_points)||{};
+  const line=[];
+  if(now&&now.kill_settled) line.push('刀口已定 → '+seatName(now.kill));
+  else if(Object.keys(pts).length) line.push('狼队正在点人（'
+    +Object.keys(pts).map(s=>(Number(s)+1)+'号→'+seatName(pts[s])).join('，')+'）');
+  if(now&&now.heal!=null&&now.heal!==-1) line.push('女巫已救 '+seatName(now.heal));
+  if(now&&now.poison!=null&&now.poison!==-1) line.push('已毒 '+seatName(now.poison));
+  if(now&&now.guard!=null&&now.guard!==-1) line.push('守卫已守 '+seatName(now.guard));
+  if(now&&now.investigate!=null&&now.investigate!==-1) line.push('已验 '+seatName(now.investigate));
+  if(!line.length) return '';
+  return '<div class="chat-god" id="godNow">⏳ 第'+esc(round||'?')+'夜（进行中）：'+esc(line.join(' · '))+'</div>';
+}
+function exitImport(){
+  _importMode=false;
+  const b=document.getElementById('btnExitImport'); if(b) b.hidden=true;
+  _chatN=0;
+  const box=document.getElementById('chatBox'); if(box){ box.innerHTML=''; box.classList.add('empty'); }
+  hint('已回到在线直播'); chatTick(true);
+}
+
+/* 回退下拉选步 = 选定局面：把该步填入第①列（不回退，只看） */
+function chatSnapPick(){
+  const i=parseInt(document.getElementById('chatSnapSel').value,10);
+  if(!i) return;
+  if(!_liveRows||!_liveRows.length){ chatSyncSteps().then(()=>chatSnapPick.apply(null,[])); return; }
+  const row=_liveRows.find(r=>Number(r.snap)===i) ||
+            _liveRows.find(r=>Number(r.snap)>i) || _liveRows[_liveRows.length-1];
+  applyStepSnap(row, _liveRows.indexOf(row));
+  hint('已把第 '+i+' 步的局面填入第①列（试跑会用到）；要真的回退请点 ⏪ 回退');
+}
+
+/* 单步（可选：用实验室提示词覆盖下一步的第一个模型调用） */
+async function stepLab(){
+  const ovrEl=document.getElementById('ovr');
+  if(ovrEl&&ovrEl.checked){
+    try{
+      const p=buildPrompt();
+      const b=engBase()||'';
+      const r=await fetch(b+'/api/lab/override',{method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({system:p.system,user:p.user})});
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      hint('已设置一次性提示词覆盖（第②列块+选中步局面）—— 下方第一步的模型调用将改用它');
+    }catch(e){ hint('提示词覆盖设置失败：'+e.message+'（本次单步仍用服务端原 prompt）'); }
+  }
+  engStep(); chatSnapSoon();
+}
+
+/* 直接在实验室开一局全 AI 局（2026-10-26 用户要的：不用跳 /play）。
+   🔴 开局前自动把第①列席位推给服务端 —— 对局 AI **永远**用第①列的配置，
+   服务端那份只是兜底（用户：服务端配置之后可能会清空）。 */
+async function startGameHere(){
+  const n=Math.max(4,Math.min(9,parseInt(document.getElementById('newAiN').value,10)||6));
+  const b=engBase()||'';
+  const info=document.getElementById('startInfo');
+  try{
+    let pushed=0;
+    const valid=usableAgents();
+    if(valid.length){ pushed=await pushAgentsRaw(valid); }
+    const r=await fetch(b+'/api/game/new',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({humans:0,ais:n})});
+    if(!r.ok){ const e=await r.json().catch(()=>({})); throw new Error(e.detail||('HTTP '+r.status)); }
+    const j=await r.json();
+    if(info) info.textContent='局号 '+j.gid;
+    hint('已开一局（'+n+' AI，局号 '+j.gid+'）—— AI 的模型与 key '+(pushed?'已自动带上第①列席位':'（第①列没配可用席位，走了服务端默认）')+'；直播马上开始滚动');
+    chatTick(true);
+  }catch(e){ if(info) info.textContent=''; hint('开局失败：'+e.message); }
+}
+
+/* 第①列里"可参与对局"的席位：填了 baseUrl+model、且不是对照席位 */
+function usableAgents(){
+  return S.agents.filter(a=>!a.ref&&a.baseUrl&&a.model).map(a=>({
+    label:a.label,baseUrl:a.baseUrl,model:a.model,apiKey:a.apiKey,
+    temperature:Number(a.temperature)||0.8,timeout:Number(a.timeout)||60,
+    thinking:a.thinking||'disabled'}));
+}
+async function pushAgentsRaw(valid){
+  const b=engBase()||'';
+  const r=await fetch(b+'/api/lab/agents-config',{method:'POST',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify({agents:valid})});
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  const j=await r.json();
+  const el=document.getElementById('agentsApplied');
+  if(el) el.textContent='已生效 ×'+j.count+'（下一局开局即用；对局中不受影响）';
+  return j.count;
+}
+
+/* 第①列席位 → 对局服务（key/model/baseUrl 全走第①列；下一局生效）。
+   对照席位（ref）不推 —— 它们只试跑，不进对局。 */
+async function pushAgents(){
+  const valid=usableAgents();
+  if(!valid.length){ hint('第①列还没有可用席位（要填接口地址+模型名）'); return; }
+  try{
+    await pushAgentsRaw(valid);
+    hint('第①列席位已推给对局服务：'+valid.map(a=>a.model).join('、')+' —— 开一局，AI 的 key/模型全走这套配置（对照席位不参与）');
+  }catch(e){ hint('推送失败：'+e.message); }
+}
+
+/* ---- 与第①②③列的联动 ---- */
+let _liveRows=null;   // 落盘步骤缓存（与第③列"拉取步骤"同源：/api/lab/steps）
+async function chatSyncSteps(){
+  const b=engBase()||'';
+  try{ const r=await fetch(b+'/api/lab/steps?limit=500'); if(!r.ok) return; const j=await r.json(); _liveRows=j.steps||[]; }catch(e){}
+  // 联动第③列：时间轴若是"引擎实时对局"模式且用户停在最后一步，就跟着直播长
+  if(S.game&&S.game.name==='引擎实时对局'&&_liveRows.length
+     && S.game.steps.length!==_liveRows.length
+     && S.gameIdx===S.game.steps.length-1){
+    engPull();          // 贴尾跟随：新步骤自动进时间轴并保持选中最后一步
+  }
+}
+/* 点直播里的某句发言 → 定位到那一步：局面填入第①列（试跑用），详情显示在列0底部 */
+async function chatPick(seat, ts){
+  if(!_liveRows||!_liveRows.length) await chatSyncSteps();
+  if(!_liveRows||!_liveRows.length){ hint('还没有落盘步骤（对局在跑就会自动有）'); return; }
+  let idx=-1;
+  for(let k=_liveRows.length-1;k>=0;k--){
+    const r=_liveRows[k];
+    if((Number(r.epoch)||0) > (ts||0)+3) continue;         // 发言 = speak 调用返回后进时间轴 ⇒ 调用时刻略早于气泡 ts
+    if(r.seat!=null && r.seat!=='' && Number(r.seat)!==seat) continue;
+    idx=k; break;
+  }
+  if(idx<0){
+    const d=document.getElementById('stepDetail');
+    if(d) d.innerHTML='<span class="badge b-warn">没找到这句发言的落盘记录</span><br>'
+      +'<span class="muted" style="font-size:11px">MOCK 对局（服务端没配真模型 key）的决策不走落盘通道，点气泡没有可看的内容 —— 用 /admin 配置台开真模型再跑一局即可。另外太早的步骤也会被日志滚动淘汰。</span>';
+    return;
+  }
+  applyStepSnap(_liveRows[idx], idx);
+  hint('已定位到「'+((Number(seat)||0)+1)+' 号」这句发言的步骤：局面已填入第①列，详情见下方');
+}
+
+/* 把一步落盘行变成"当前快照"（第①列局面来源）并显示详情 —— 回退下拉选步与点气泡共用 */
+function applyStepSnap(row, idx){
+  const sys=(row.prompt&&row.prompt.system)||'';
+  const usr=(row.prompt&&row.prompt.user)||'';
+  S.snapshots[0]={
+    name:'对局·第'+(row.round||'?')+'天 '+((row.phase||'')||'')+' · '+(row.seat!=null&&row.seat!==''?(Number(row.seat)+1)+' 号':'?'),
+    round:row.round||1, phase:row.phase||'', taskKind:'text',
+    camp:(row.role||'')==='wolf'?'狼人':'好人',
+    identity:sys, public:usr, hardFacts:'', votes:'', timeline:'', allowed:'',
+    task:'（按下方提示词块+此局面重跑）', output:(row.raw||'')
+  };
+  S.activeSnap=0;
+  if(!S.game||S.game.name!=='引擎实时对局'||S.game.steps.length!==_liveRows.length){
+    const rows=_liveRows.map((s,i)=>({
+      _i:i, round:s.round, phase:s.phase, seat:s.seat, role:s.role,
+      identity:(s.prompt&&s.prompt.system)||'', public:'', timeline:'',
+      hardFacts:'', votes:'', allowed:'',
+      task:(s.prompt&&s.prompt.user)||'', output:'',
+      raw:s.raw||'', parsed:null, fallback:!!s.fallback, ms:s.ms, model:s.model
+    }));
+    S.game={name:'引擎实时对局', steps:rows};
+  }
+  S.gameIdx=(idx!=null)?idx:S.game.steps.length-1;
+  save(); render();
+  showStepDetail(row);
+}
+/* 选中步详情（列0底部）：归因表 + 当时输出 + 当时 prompt（折叠） */
+function showStepDetail(row){
+  const d=document.getElementById('stepDetail'); if(!d) return;
+  d.innerHTML='<table>'
+    +'<tr><th>座位 / 角色</th><td>'+(row.seat!=null&&row.seat!==''?(Number(row.seat)+1)+' 号 '+esc(row.role||''):'（旧日志没记）')+'</td></tr>'
+    +'<tr><th>局面</th><td>第'+esc(row.round||'?')+'天 '+esc(_phaseCn(row.phase||''))+'</td></tr>'
+    +'<tr><th>耗时 / 模型</th><td>'+esc(String(row.ms||'?'))+' ms · '+esc(row.model||'?')+'</td></tr>'
+    +'<tr><th>当时判定</th><td>'+(row.fallback?'<span class="badge b-bad">兜底</span>':'<span class="badge b-ok">正常</span>')+'</td></tr>'
+    +'</table>'
+    +'<details style="margin-top:4px"><summary style="cursor:pointer">当时的 prompt（system / user）</summary>'
+    +'<pre style="white-space:pre-wrap;font-size:11px;max-height:22vh;overflow:auto;background:#0f1218;padding:6px;border-radius:4px">'
+    +esc(((row.prompt&&row.prompt.system)||'')+'\n────────\n'+((row.prompt&&row.prompt.user)||''))+'</pre></details>';
+  const out=document.getElementById('out');
+  if(out) out.textContent=row.raw?('【这一步当时的输出（一字不改）】\n'+row.raw):'（这一步没有记录原始输出）';
+}
+async function chatSnap(){
+  _chatSnapAt=Date.now();
+  const b=engBase()||'';
+  let j=null;
+  try{ const r=await fetch(b+'/api/lab/snapshots?limit=200'); if(r.ok) j=await r.json(); }catch(e){}
+  const sel=document.getElementById('chatSnapSel'); if(!sel) return;
+  const cur=sel.value;
+  const rows=(j&&j.snapshots)||[];
+  sel.innerHTML='<option value="">— 回退到哪一步之前（共 '+rows.length+' 步快照）—</option>'
+    + rows.slice().reverse().map(s=>
+        '<option value="'+s.i+'">第 '+s.i+' 步 · 第'+(s.round||'?')+'天 '+esc(_phaseCn(s.phase))+'</option>').join('');
+  if(cur) sel.value=cur;
+  _chatSnapped=false;
+}
+function chatSnapSoon(){ _chatSnapped=true; }
+async function chatRewind(){
+  const sel=document.getElementById('chatSnapSel');
+  const i=parseInt(sel.value,10);
+  if(!i){ hint('先在下拉里选要回退到的步'); return; }
+  const b=engBase()||'';
+  let j=null;
+  try{ const r=await fetch(b+'/api/lab/rewind?i='+i,{method:'POST'}); j=await r.json(); }catch(e){ hint('回退失败：'+e.message); return; }
+  if(j&&j.ok){
+    _chatN=0;
+    hint('已回退到第 '+j.rewound_to+' 步之前（第'+(j.round||'?')+'天 '+_phaseCn(j.phase)+'），对局已暂停；改完提示词按 ⏭ 单步或 ▶ 继续重跑');
+    engPull();          // 联动：第③列时间轴自动刷新（被否决的未来已从日志截断）
+  } else {
+    hint('回退失败：'+((j&&(j.detail||j.error))||'未知原因'));
+  }
+  chatSnap();
+}
+setInterval(()=>{ chatTick(); if(_chatSnapped) chatSnap(); }, 2000);
+setTimeout(()=>{ chatTick(); chatSnap(); }, 600);
+
+/* ---- 引擎连接：实时对局的暂停 / 单步 / 拉取步骤 ---- */
+let _poll=null;
+function engBase(){ const v=(document.getElementById('engine')||{}).value||''; return v.replace(/\/+$/,''); }
+async function engGet(p){
+  const b=engBase()||'';   // 留空 = 同源（/lab 挂在对局服务上）。旧版空地址直接 return，
+                           // 直播面板的暂停/继续/单步会静默失效（2026-10-26 修）
+  try{ const r=await fetch(b+p, {headers:{'Accept':'application/json'}}); if(!r.ok) throw new Error('HTTP '+r.status); return await r.json(); }
+  catch(e){ document.getElementById('engInfo').innerHTML='<span class="badge b-bad">连不上</span> '+esc(e.message); return null; }
+}
+async function engPost(p){
+  const b=engBase()||'';   // 同上：同源兜底
+  try{ const r=await fetch(b+p, {method:'POST'}); if(!r.ok) throw new Error('HTTP '+r.status); return await r.json(); }
+  catch(e){ document.getElementById('engInfo').innerHTML='<span class="badge b-bad">连不上</span> '+esc(e.message); return null; }
+}
+async function engStatus(){
+  const j=await engGet('/api/lab/status'); if(!j) return;
+  document.getElementById('engInfo').innerHTML=
+    (j.paused?'<span class="badge b-warn">已暂停</span>':'<span class="badge b-ok">推进中</span>')
+    + ` 步骤 ${j.steps} · 落盘 ${j.log_enabled?'开':'关'}`;
+  hint('已连接：'+engBase()+'（第 '+(j.ctx&&j.ctx.round||0)+' 天 '+(j.ctx&&j.ctx.phase||'')+'）');
+  return j;
+}
+async function engPause(v){ const j=await engPost('/api/lab/pause?value='+(v?'true':'false')); if(!j) return; await engStatus(); hint(v?'已暂停：对局停在下一步之前，现在可以改提示词了':'已继续'); }
+async function engStep(){ const j=await engPost('/api/lab/step?n=1'); if(!j) return; await engStatus(); hint('已放行一步，走完自动停住'); }
+async function engPull(){
+  const j=await engGet('/api/lab/steps?limit=500'); if(!j) return;
+  const rows=(j.steps||[]).map((s,i)=>({
+    _i:i, round:s.round, phase:s.phase, seat:s.seat, role:s.role,
+    identity:(s.prompt&&s.prompt.system)||'', public:'', timeline:'',
+    hardFacts:'', votes:'', allowed:'',
+    task:(s.prompt&&s.prompt.user)||'', output:'',
+    raw:s.raw||'', parsed:null, fallback:!!s.fallback, ms:s.ms, model:s.model
+  }));
+  if(!rows.length){ hint('还没有落盘步骤：先让对局跑起来（确认服务里 LAB_LOG 未关）'); return; }
+  S.game={name:'引擎实时对局', steps:rows}; S.gameIdx=rows.length-1; save(); render();
+  hint('已拉取 '+rows.length+' 步，默认停在最后一步');
+}
+function togglePoll(){
+  const on=document.getElementById('autopoll').checked;
+  if(_poll){ clearInterval(_poll); _poll=null; }
+  if(on){ _poll=setInterval(()=>{ engStatus().then(()=>engPull()); }, 3000); hint('自动刷新已开：每 3 秒同步一次状态与步骤'); }
+  else { hint('自动刷新已关'); }
+}
+function pickStep(i){ S.gameIdx=i; save(); render(); showStepDetail(); }
+/* 选中步的详情回填（2026-10-26）：以前只高亮列表项，prompt/原始输出区不动 —— 点了也白点 */
+function showStepDetail(){
+  const cur=S.game&&S.game.steps[S.gameIdx]; if(!cur) return;
+  const out=document.getElementById('out');
+  if(out) out.textContent=cur.raw?('【日志里记录的当时输出】\n'+cur.raw):'（这一步没有记录原始输出）';
+  const pa=document.getElementById('parse');
+  if(pa) pa.innerHTML='<table>'
+    +'<tr><th>耗时</th><td>'+esc(String(cur.ms||'?'))+' ms</td></tr>'
+    +'<tr><th>模型</th><td>'+esc(cur.model||'?')+'</td></tr>'
+    +'<tr><th>座位 / 角色</th><td>'+(cur.seat!=null&&cur.seat!==''?(Number(cur.seat)+1)+' 号 '+esc(cur.role||''):'（旧日志没记座位）')+'</td></tr>'
+    +'<tr><th>判定</th><td>'+(cur.fallback?'<span class="badge b-bad">当时兜底</span>':'<span class="badge b-ok">当时正常</span>')+'</td></tr>'
+    +'</table>';
+}
+function step(d){ if(!S.game) { alert('先导入对局日志'); return; }
+  S.gameIdx=Math.max(0,Math.min(S.game.steps.length-1,S.gameIdx+d)); save(); render(); }
+function loadStep(){
+  if(!S.game){ hint('先导入对局日志'); return; }
+  const s=S.game.steps[S.gameIdx]; if(!s) return;
+  const snap={ name:`L${S.gameIdx+1} · ${s.round||'?'}天 ${s.phase||''} · ${s.seat||'?'}号`,
+    round:s.round||1, phase:s.phase||'', taskKind:/\{/.test(s.output||'')||(s.parsed&&typeof s.parsed==='object')?'json':'text',
+    camp:s.camp||'', identity:s.identity||'', public:s.public||'', hardFacts:s.hardFacts||'',
+    votes:s.votes||'', timeline:s.timeline||'', allowed:s.allowed||'', task:s.task||'', output:s.output||'' };
+  S.snapshots.push(snap); S.activeSnap=S.snapshots.length-1; save(); render();
+  document.getElementById('status').innerHTML=`<span class="badge b-ok">已载入为快照</span> ${esc(snap.name)}`;
+  if(s.raw) document.getElementById('out').textContent='【日志里记录的当时输出】\n'+s.raw;
+}
+
+/* ================= 组装与调用 ================= */
+function buildPrompt(){
+  const sn=S.snapshots[S.activeSnap]||{};
+  const m=/还没开口[：: ]*([0-9、号 ]+)/.exec(sn.timeline||'');
+  const notSpoken=m?m[1].trim():'';
+  const blk=id=>S.blocks[id]&&S.blocks[id].on?S.blocks[id].text:'';
+  const fill=t=>t
+    .replace(/\{\{rules\}\}/g,blk('rules'))
+    .replace(/\{\{identity\}\}/g,blk('identity')||sn.identity||'')
+    .replace(/\{\{public\}\}/g,sn.public||'')
+    .replace(/\{\{hardInfo\}\}/g,blk('hardInfo'))
+    .replace(/\{\{hardFacts\}\}/g,sn.hardFacts||'')
+    .replace(/\{\{votes\}\}/g,sn.votes||'')
+    .replace(/\{\{style\}\}/g,blk('style'))
+    .replace(/\{\{timeline\}\}/g,blk('timeline')||sn.timeline||'')
+    .replace(/\{\{claim\}\}/g,blk('claim'))
+    .replace(/\{\{wolf\}\}/g,blk('wolf'))
+    .replace(/\{\{angle\}\}/g,blk('angle'))
+    .replace(/\{\{antiRepeat\}\}/g,blk('antiRepeat'))
+    .replace(/\{\{task\}\}/g,blk('task')||sn.task||'')
+    .replace(/\{\{output\}\}/g,blk('output')||sn.output||'')
+    .replace(/\{\{notSpoken\}\}/g,notSpoken||'（无）')
+    .replace(/\{\{seat\}\}/g,S.slots.seat||'')
+    .replace(/\{\{role_label\}\}/g,S.slots.role_label||'')
+    .replace(/\{\{personality\}\}/g,S.slots.personality||'')
+    .replace(/\{\{stake\}\}/g,S.slots.stake||'')
+    .replace(/\{\{experiences\}\}/g,S.slots.experiences||'')
+    .replace(/\{\{anti_injection\}\}/g,S.slots.anti_injection||'')
+    .replace(/\{\{anti_bomb\}\}/g,S.slots.anti_bomb||'');
+  return {system:fill(S.tmpl.system), user:fill(S.tmpl.user)};
+}
+async function callLLM(agent, messages){
+  const base=(S.proxy?S.proxy:(agent.baseUrl||'')).replace(/\/+$/,'');
+  if(!base) throw new Error('未填接口地址，也不知道代理地址');
+  const body={model:agent.model, messages, temperature:parseFloat(agent.temperature)||0.8};
+  if(agent.thinking==='disabled') body.thinking={type:'disabled'};
+  const t0=performance.now();
+  const ctl=new AbortController(); const to=setTimeout(()=>ctl.abort(), (parseFloat(agent.timeout)||60)*1000);
+  try{
+    const r=await fetch(base+'/chat/completions',{method:'POST',signal:ctl.signal,
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+(agent.apiKey||'')},
+      body:JSON.stringify(body)});
+    clearTimeout(to);
+    if(!r.ok){ const tx=await r.text(); throw new Error(`HTTP ${r.status} ${tx.slice(0,200)}`); }
+    const j=await r.json();
+    const msg=(j.choices&&j.choices[0]&&j.choices[0].message)||{};
+    return {text:(msg.content||msg.reasoning_content||'').toString(), ms:Math.round(performance.now()-t0), raw:j};
+  }catch(e){ clearTimeout(to); throw e; }
+}
+function guess(raw, kind){
+  if(!raw||!raw.trim()) return {parsed:null, fallback:true, why:'空输出 —— 多半是超时/限流/网络，先查基建而不是提示词'};
+  if(kind==='json'){
+    const m=/\{[^{}]*\}/.exec(raw);
+    if(!m) return {parsed:null, fallback:true, why:'没有 JSON —— 输出格式没讲清，属于提示词问题'};
+    try{ return {parsed:JSON.parse(m[0]), fallback:false, why:'JSON 正常'}; }
+    catch(e){ return {parsed:null, fallback:true, why:'JSON 解析失败（中文数字/引号常见），属于提示词问题'}; }
+  }
+  return {parsed:raw.trim(), fallback:false, why:'自由文本，跑净化闸后使用'};
+}
+async function runOnce(compare){
+  const out=document.getElementById('out'), st=document.getElementById('status'), pa=document.getElementById('parse');
+  const sn=S.snapshots[S.activeSnap]||{}; const p=buildPrompt();
+  const messages=[{role:'system',content:p.system},{role:'user',content:p.user}];
+  const main=S.agents[S.activeAgent];
+  st.textContent='调用中…'; out.textContent=''; pa.innerHTML='';
+  if(!main||!main.apiKey||!main.model||!main.baseUrl){ st.innerHTML='<span class="badge b-warn">席位配置不完整（接口地址 / 模型名 / Key 都要填）</span>'; return; }
+  try{
+    const r=await callLLM(main,messages); const g=guess(r.text, sn.taskKind);
+    out.textContent=r.text||'（空）';
+    const hist=(S.game&&S.game.steps[S.gameIdx]&&S.game.steps[S.gameIdx].raw)||'';
+    const same=hist? (hist.trim()===(r.text||'').trim()) : null;
+    pa.innerHTML=`<table>
+      <tr><th>耗时</th><td>${r.ms} ms</td></tr>
+      <tr><th>提示词字数</th><td>${(p.system+p.user).length}</td></tr>
+      <tr><th>解析结果</th><td>${esc(JSON.stringify(g.parsed))}</td></tr>
+      <tr><th>是否兜底</th><td>${g.fallback?'<span class="badge b-bad">是</span>':'<span class="badge b-ok">否</span>'}</td></tr>
+      <tr><th>归因结论</th><td>${esc(g.why)}</td></tr>
+      ${hist?`<tr><th>与日志对比</th><td>${same?'<span class="badge b-ok">和上次一致</span>':'<span class="badge b-warn">与上次不同</span>'}</td></tr>`:''}
+    </table>`;
+    st.innerHTML=`<span class="badge ${g.fallback?'b-bad':'b-ok'}">完成</span>`;
+    pushLog({snap:sn.name,label:main.label,model:main.model,raw:r.text,parsed:g.parsed,fallback:g.fallback,ms:r.ms,prompt:p});
+    if(compare){
+      const cmp=S.agents[parseInt(document.getElementById('cmpAgent').value,10)];
+      if(cmp&&cmp!==main){
+        try{
+          const r2=await callLLM(cmp,messages); const g2=guess(r2.text, sn.taskKind);
+          out.textContent=`—— ${main.label} ——\n${r.text||'（空）'}\n\n—— ${cmp.label} ——\n${r2.text||'（空）'}`;
+          pa.innerHTML+=`<div class="sub">对比 ${esc(cmp.label)}：${g2.fallback?'<span class="badge b-bad">兜底</span>':'<span class="badge b-ok">正常</span>'} · ${r2.ms}ms · ${esc(g2.why)}</div>`;
+          pushLog({snap:sn.name,label:cmp.label,model:cmp.model,raw:r2.text,parsed:g2.parsed,fallback:g2.fallback,ms:r2.ms,prompt:p});
+        }catch(e){ pa.innerHTML+=`<div class="sub">对比失败：${esc(e.message)}</div>`; }
+      }
+    }
+  }catch(e){
+    st.innerHTML=`<span class="badge b-bad">失败</span> ${esc(e.message)}`;
+    out.textContent='（无输出）\n'+e.message+'\n\n若是 CORS / NetworkError → 改用本地代理 promptlab_proxy.py';
+  }
+}
+function pushLog(e){ S.log.push(Object.assign({ts:new Date().toLocaleTimeString('zh-CN',{hour12:false})},e)); save(); renderLog(); }
+function renderLog(){
+  const rows=S.log.slice().reverse().slice(0,60).map(l=>
+    `<tr><td>${esc(l.ts)}</td><td>${esc(l.snap)}</td><td>${esc(l.label)}</td>
+     <td>${l.fallback?'<span class="badge b-bad">兜底</span>':'<span class="badge b-ok">正常</span>'}</td>
+     <td>${esc(l.ms)}ms</td><td title="${esc((l.raw||'').slice(0,400))}">${esc((l.raw||'').slice(0,50))}</td></tr>`).join('');
+  document.getElementById('logWrap').innerHTML=S.log.length
+    ? `<table><tr><th>时间</th><th>快照</th><th>席位</th><th>结果</th><th>耗时</th><th>原始输出</th></tr>${rows}</table>`
+    : '<div class="muted">还没有记录</div>';
+}
+
+/* ================= 导入导出 ================= */
+function dl(n,t){ const b=new Blob([t],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=n; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); }
+function exportAll(){ dl('promptlab-state.json', JSON.stringify(S,null,2)); }
+function exportLog(){ dl('promptlab-log.jsonl', S.log.map(l=>JSON.stringify(l)).join('\n')); }
+function importAll(inp){ const f=inp.files[0]; if(!f) return; const r=new FileReader();
+  r.onload=()=>{ try{ const o=JSON.parse(r.result); if(!o||!o.version) throw new Error('bad'); S=o; save(); render(); }catch(e){ alert('导入失败：不是本工具导出的 JSON'); } };
+  r.readAsText(f); inp.value=''; }
+function wipe(){ if(!confirm('清空本机全部实验室数据？此操作不可恢复')) return; localStorage.removeItem(KEY); S=blank(); save(); render(); }
+
+render();
+</script>
+</body>
+</html>

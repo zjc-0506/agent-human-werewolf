@@ -1,0 +1,62 @@
+# ---- Secrets / keys (NEVER commit) ----
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+_runtime.json
+
+# ---- 两周工作安排：只在小组群私下传（内含 key），不进 git（2026-10-27 撤出） ----
+docs/两周工作安排-10.27-11.7.md
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ---- Node / frontend ----
+node_modules/
+dist/
+build/
+.vite/
+*.local
+
+# ---- Audio / media generated at runtime ----
+*.wav
+*.mp3
+*.pcm
+
+# ---- Logs ----
+logs/
+*.log
+*.err
+npm-debug.log*
+yarn-error.log*
+
+# ---- Dev scratch files ----
+=
+_tips.txt
+_wi.txt
+
+# ---- 提示词实验室运行时产物（步骤日志 / 暂停控制），不是代码 ----
+lab/
+
+# ---- 对局存档（2026-10-26 run_archive）：每局一个目录，体积大且含对局原文 ----
+# 格式说明与脱敏样例在 runs-sample/（那个目录正常提交）
+runs/
+
+# ---- OS / editor ----
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# ---- playwright-cli 调试产物（截图 / DOM 快照），不是代码（2026-10-27 误提交过一次）----
+.playwright-cli/
+
