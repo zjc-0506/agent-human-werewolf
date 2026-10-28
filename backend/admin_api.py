@@ -67,13 +67,13 @@ ADMIN_SECRET_KEYS = tuple(k for k in ADMIN_ENV_KEYS if ("KEY" in k or "TOKEN" in
 #
 # 三种条目：
 #   STATIC  —— 模块级字符串（改它用 setattr）
-#   TABLE   —— 表里的叶子（改它**原地改字典** ⇒ 下一局立刻生效，不用重启也不用 reload）
+#   TABLE   —— 表里的叶子（改它**原地改字典** ⇒ 下一次模型调用就生效，含进行中的局；不用重启也不用 reload）
 #   JSON    —— 整张 dict[str,str] 表（用来**加/删条目**，要过 JSON 校验）
 PROMPT_STATIC = (
     # （模块, 属性, 分组, 说明）
     ("agents", "SYSTEM_TEMPLATE", "系统与风格",
      "主模板。{seat}/{role_label}/{personality}/{stake}/{experiences}/{anti_injection}/"
-     "{anti_bomb}/{style_rules}/{private} 是占位符，**别删**"),
+     "{anti_bomb}/{no_fabrication}/{hard_info}/{style_rules}/{private} 是占位符，**别删**"),
     ("agents", "_STYLE_COMMON", "系统与风格",
      "说话要求（公共部分）。{style} 会被替换成血腥/温和那行"),
     ("agents", "_STYLE_TAME", "系统与风格", "说话要求·非血腥档"),
@@ -608,14 +608,14 @@ def register(app: FastAPI, *, reload_fn, snapshot_fn, page_fn) -> None:
                 if not isinstance(val, str):
                     return JSONResponse({"error": key + " 的值必须是字符串"},
                                         status_code=400)
-                _write_path([it["module"]] + it["path"], val)   # 立刻生效（下一局开始用）
+                _write_path([it["module"]] + it["path"], val)   # 立刻生效（下一次模型调用就用，含进行中的局）
             applied.append(key)
             saved[key] = val
         st = _state()
         st["prompts"].update(saved)
         _write_state(st)
         print("[admin] 改了 prompt " + str(len(applied)) + " 项：" + ", ".join(applied[:8])
-              + (" …" if len(applied) > 8 else "") + "（下一局生效）", flush=True)
+              + (" …" if len(applied) > 8 else "") + "（下一次模型调用即生效，含进行中的局）", flush=True)
         return JSONResponse({"ok": True, "applied": applied,
                              "note": "已生效：下一次模型调用即用新文本（含进行中的局）"})
 

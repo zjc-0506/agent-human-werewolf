@@ -11,6 +11,7 @@
 > - `docs/openapi.json` —— FastAPI 自动生成的全量端点描述（`python -c "import sys; sys.path.insert(0,'backend'); from server import app; import json; print(json.dumps(app.openapi()))" > docs/openapi.json` 重新生成）
 > - `frontend/mock/fixtures/*.json` —— **实机抓的**真实响应样例，前端 mock 直接喂这些
 > - `frontend/mock/mock_server.py` —— 50 行假服务，把 fixtures 当 API 返回
+> - `docs/提示词契约-走查与落地.md` —— 提示词**文本**契约（哪些字能改、什么时候生效、冻结怎么落地）。本文件只管 HTTP 字段，不管 prompt 文本
 
 ## 0. 基址与形态
 

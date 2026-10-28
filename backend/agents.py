@@ -317,7 +317,7 @@ SPEECH_PROGRESS_HEAD: str = ("### 今天的发言顺序（公开；✓已说的�
 # 🔴 2026-10-26 提示词契约收尾：build_messages 里剩下的**段落标题/收尾**原来全是
 #    f-string 内联 —— 配置台看不见、守门只能靠 PROMPT_FUNC_LITERALS 白名单兜着。
 #    现在全部抽成模块级常量（**逐字原样**，不改一个字符 ⇒ 行为零变化），
-#    并登记进 admin_api.PROMPT_STATIC —— 宁在实验室/配置台改标题措辞，下一局生效。
+#    并登记进 admin_api.PROMPT_STATIC —— 在实验室/配置台改标题措辞，下一次模型调用即生效（含进行中的局）。
 #    段落里的**数据**（发言记录/票型/立场卡）照旧由引擎填，不在契约范围。
 HEAD_BOARD_FACT: str = "### 本局配置（发牌前全桌确认过的，公开）\n"
 HEAD_PUBLIC_LOG: str = "### 主持人已经公布的事\n"
